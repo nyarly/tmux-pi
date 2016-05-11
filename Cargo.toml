@@ -1,0 +1,10 @@
+[package]
+name = "tmux-pi"
+description = "A programming interface to tmux"
+version = "0.1.0"
+authors = ["Judson <nyarly@gmail.com>"]
+publish = false
+
+[dependencies]
+regex = "0.1.69"
+
