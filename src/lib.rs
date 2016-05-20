@@ -165,14 +165,14 @@ impl  CommandStreamReader  {
 
       match self.maybe_output {
         None => self.capture_notification(),
-        Some(ref block) => self.capture_output_block(block),
+        Some(ref mut block) => self.capture_output_block(block),
       }
 
       while self.results.len() > 0 {
         match send_channels.try_recv() {
           Err(TryRecvError::Empty) => break,
           Err(_) => return,
-          Ok(SeqRs(num, ref resp, ref tx)) => {
+          Ok(SeqRs(num, ref mut resp, ref tx)) => {
             let pos = self.results.iter()
                              .position(|&r| r.num == num)
                              .expect("received response ahead of command");
