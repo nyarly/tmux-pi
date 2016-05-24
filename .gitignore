@@ -2,3 +2,4 @@ target
 Cargo.lock
 errors.err
 *.sw?
+*.rustfmt

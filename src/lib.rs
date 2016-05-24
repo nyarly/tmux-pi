@@ -59,7 +59,7 @@ fn write_command_stream(commands: Receiver<Pair>, results: Sender<SeqRs>, mut st
 
 fn read_command_stream(stdout: ChildStdout, send_channels: Receiver<SeqRs>) {
   let mut csr = CommandStreamReader::new();
-  csr.read(stdout, send_channels);
+  csr.read(stdout, send_channels)
 }
 
 
@@ -111,7 +111,6 @@ struct RawResponse {
 
 use regex::{Captures, Regex};
 use std::io::Write;
-
 type StreamBuffer<'a> = &'a [u8];
 
 use std::{str, u64};
@@ -172,6 +171,7 @@ impl  CommandStreamReader  {
           }
         }
       }
+
     }
   }
 
@@ -184,6 +184,7 @@ impl  CommandStreamReader  {
     match self.stanza_re.captures(&line) {
       None => (),
       Some(captures) => {
+
         match captures.at(1).unwrap() {
           "begin" => {
             self.get_args(&line);
