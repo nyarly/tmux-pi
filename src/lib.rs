@@ -59,7 +59,7 @@ fn write_command_stream(commands: Receiver<Pair>, results: Sender<SeqRs>, mut st
 
 fn read_command_stream(stdout: ChildStdout, send_channels: Receiver<SeqRs>) {
   let mut csr = CommandStreamReader::new();
-  csr.read(stdout, send_channels)
+  csr.read(stdout, send_channels);
 }
 
 
@@ -112,124 +112,81 @@ struct RawResponse {
 use regex::{Captures, Regex};
 use std::io::Write;
 
+type StreamBuffer<'a> = &'a [u8];
+
+use std::{str, u64};
+use std::str::FromStr;
+use std::io::{Read,BufRead,BufReader,Lines};
+use std::sync::mpsc::TryRecvError;
+use std::ops::{Deref,DerefMut};
+
 struct CommandStreamReader {
-  buffer: [u8; 4096],
-  start: usize,
-  end: usize,
-  max: usize,
-  half: usize,
   maybe_output: Option<String>,
-  response_mode: bool,
-  max_end_length: usize,
   results: Vec<RawResponse>,
   stanza_re: Regex,
   stanza_end_re: Regex,
   arg_re: Regex,
 }
 
-type StreamBuffer<'a> = &'a [u8];
-
-use std::{str, u64};
-use std::str::FromStr;
-use std::io::Read;
-use std::sync::mpsc::TryRecvError;
 impl  CommandStreamReader  {
   fn new() -> CommandStreamReader {
     let max = 4096;
     CommandStreamReader{
-      buffer: [0; 4096],
-      start: 0,
-      end: 0,
-      max: max,
-      half : max / 2,
-      response_mode : false,
       maybe_output: None,
       results : Vec::new(),
 
-      stanza_re : Regex::new("(?m)^%(begin|exit|layout-change|output|session-changed|\
+      stanza_re : Regex::new(r"^%(begin|exit|layout-change|output|session-changed|\
       session-renamed|sessions-changed|unlinked-window-add|window-add|window-close|\
-      window-renamed)").unwrap(),
-      stanza_end_re : Regex::new("(?m)^%(end|error)").unwrap(),
-      max_end_length : 6,
+      window-renamed)\s+(.*)").unwrap(),
+      stanza_end_re : Regex::new(r"^%(end|error)").unwrap(),
 
       arg_re : Regex::new(r"^(\s+(?<first>\S+))?(\s+(?<second>\S+))?(\s+(?<third>\S+))?\s*\n").unwrap(),
     }
   }
 
   fn read(&mut self, mut stdout: ChildStdout, send_channels: Receiver<SeqRs>) {
-    loop {
-      match stdout.read(&mut self.buffer[self.end..(self.max - 1)]) {
-        Ok(num) => self.end += num,
-        Err(err) => panic!(err),
-      }
+    let reader = BufReader::new(stdout);
+    let mut maybe_output: Option<String> = None;
+    for line_res in reader.lines() {
+      let line = match line_res {
+        Ok(l) => l,
+        Err(e) => return
+      };
 
-      match self.maybe_output {
-        None => self.capture_notification(),
-        Some(ref block) => self.capture_output_block(block),
+      match maybe_output {
+        None => self.capture_notification(line),
+        Some(ref mut b) => self.capture_output_block(b, line),
       }
 
       while self.results.len() > 0 {
         match send_channels.try_recv() {
           Err(TryRecvError::Empty) => break,
           Err(_) => return,
-          Ok(SeqRs(num, ref resp, ref tx)) => {
+          Ok(SeqRs(num, mut resp, tx)) => {
             let pos = self.results.iter()
-                             .position(|&r| r.num == num)
+                             .position(|ref r| r.num == num)
                              .expect("received response ahead of command");
             let res = self.results.swap_remove(pos);
             resp.consume(&(res.output));
-            tx.send(*resp).unwrap_or(())
+            tx.send(resp).unwrap_or(())
           }
         }
       }
-
-      if self.start > self.half {
-        self.buffer[..(self.end - self.start)].clone_from_slice(&self.buffer[self.start..self.end]);
-        self.end = self.end - self.start;
-        self.start = 0
-      }
     }
   }
 
-  fn advance_buffer(&mut self, captures: &Captures) {
-    let (b, e) = captures.pos(0).unwrap();
-    self.start += e;
-  }
-
-  fn buffer_prefix(&self, end: usize) -> StreamBuffer {
-    &self.buffer[self.start..end]
-  }
-
-  fn valid_str(&self, end: usize) -> &str {
-    match str::from_utf8(self.buffer_prefix(end)) {
-      Ok(s) => s,
-      Err(e) => str::from_utf8(&self.buffer_prefix(end)[..e.valid_up_to()]).unwrap()
-    }
-  }
-
-  fn current_buffer(&self) -> StreamBuffer {
-    self.buffer_prefix(self.end)
-  }
-
-  fn current_str(&self) -> &str {
-    self.valid_str(self.end)
-  }
-
-  fn get_args(&mut self) -> (Option<&str>, Option<&str>, Option<&str>) {
-    let captures = self.arg_re.captures(self.current_str()).unwrap();
-    self.advance_buffer(&captures);
+  fn get_args<'a>(&'a mut self, line: &'a str) -> (Option<&str>, Option<&str>, Option<&str>) {
+    let captures = self.arg_re.captures(&line).unwrap();
     (captures.at(1), captures.at(2), captures.at(3))
   }
 
-  fn capture_notification(&mut self) {
-    match self.stanza_re.captures(self.current_str()) {
+  fn capture_notification(&mut self, line: String) {
+    match self.stanza_re.captures(&line) {
       None => (),
       Some(captures) => {
-        self.advance_buffer(&captures);
-
         match captures.at(1).unwrap() {
           "begin" => {
-            self.get_args();
+            self.get_args(&line);
             self.maybe_output = Some(String::from(""))
           }
           "exit" => (),
@@ -248,28 +205,21 @@ impl  CommandStreamReader  {
     }
   }
 
-  fn capture_output_block(&mut self, block: &String) {
-    let limit: usize;
-    match self.stanza_end_re.captures(self.current_str()) {
+  fn capture_end(&mut self, block: String, line: &str) {
+    let (timestamp, number, flags) = self.get_args(line);
+    self.results.push(RawResponse {
+      num: u64::from_str(number.expect("if flags is present, so must number be")).unwrap(),
+      output: block,
+    })
+  }
+
+  fn capture_output_block(&mut self, block: &mut String, line: String) {
+    match self.stanza_end_re.captures(&line) {
       None => {
-        limit = self.end - (self.max_end_length);
-        block.push_str(self.current_str());
-        self.start = limit;
+        block.push_str(&line);
       }
       Some(capture) => {
-        let (limit, finish) = capture.pos(0).expect("the zero capture should always exist, right?");
-        let (timestamp, number, flags) = self.get_args();
-        block.push_str(self.valid_str(limit));
-        self.start = limit;
-        if flags.is_none() {
-          return;
-        }
-        self.start = finish;
-        self.maybe_output = None;
-        self.results.push(RawResponse {
-          num: u64::from_str(number.expect("if flags is present, so much number be")).unwrap(),
-          output: block.clone(),
-        })
+        self.capture_end(block.clone(), capture.at(1).unwrap());
       }
     }
   }
