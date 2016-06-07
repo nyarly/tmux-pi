@@ -2,6 +2,8 @@ use std::thread::{self, JoinHandle};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
+#[macro_use]
+extern crate lazy_static;
 extern crate regex;
 
 struct TmuxControl {
@@ -122,9 +124,14 @@ use std::ops::{Deref,DerefMut};
 struct CommandStreamReader {
   maybe_output: Option<String>,
   results: Vec<RawResponse>,
-  stanza_re: Regex,
-  stanza_end_re: Regex,
-  arg_re: Regex,
+}
+
+fn get_args(line: &str) -> (Option<&str>, Option<&str>, Option<&str>) {
+  lazy_static!  {
+    static ref arg_re: Regex = Regex::new(r"^(\s+(?<first>\S+))?(\s+(?<second>\S+))?(\s+(?<third>\S+))?\s*\n").unwrap();
+  }
+  let captures = arg_re.captures(&line).unwrap();
+  (captures.at(1), captures.at(2), captures.at(3))
 }
 
 impl  CommandStreamReader  {
@@ -134,12 +141,6 @@ impl  CommandStreamReader  {
       maybe_output: None,
       results : Vec::new(),
 
-      stanza_re : Regex::new(r"^%(begin|exit|layout-change|output|session-changed|\
-      session-renamed|sessions-changed|unlinked-window-add|window-add|window-close|\
-      window-renamed)\s+(.*)").unwrap(),
-      stanza_end_re : Regex::new(r"^%(end|error)").unwrap(),
-
-      arg_re : Regex::new(r"^(\s+(?<first>\S+))?(\s+(?<second>\S+))?(\s+(?<third>\S+))?\s*\n").unwrap(),
     }
   }
 
@@ -175,19 +176,19 @@ impl  CommandStreamReader  {
     }
   }
 
-  fn get_args<'a>(&'a mut self, line: &'a str) -> (Option<&str>, Option<&str>, Option<&str>) {
-    let captures = self.arg_re.captures(&line).unwrap();
-    (captures.at(1), captures.at(2), captures.at(3))
-  }
-
   fn capture_notification(&mut self, line: String) {
-    match self.stanza_re.captures(&line) {
+    lazy_static! {
+      static ref stanza_re: Regex = Regex::new(r"^%(begin|exit|layout-change|output|session-changed|\
+      session-renamed|sessions-changed|unlinked-window-add|window-add|window-close|\
+      window-renamed)\s+(.*)").unwrap();
+    }
+    match stanza_re.captures(&line) {
       None => (),
       Some(captures) => {
 
         match captures.at(1).unwrap() {
           "begin" => {
-            self.get_args(&line);
+            get_args(&line);
             self.maybe_output = Some(String::from(""))
           }
           "exit" => (),
@@ -207,7 +208,7 @@ impl  CommandStreamReader  {
   }
 
   fn capture_end(&mut self, block: String, line: &str) {
-    let (timestamp, number, flags) = self.get_args(line);
+    let (timestamp, number, flags) = get_args(line);
     self.results.push(RawResponse {
       num: u64::from_str(number.expect("if flags is present, so must number be")).unwrap(),
       output: block,
@@ -215,7 +216,10 @@ impl  CommandStreamReader  {
   }
 
   fn capture_output_block(&mut self, block: &mut String, line: String) {
-    match self.stanza_end_re.captures(&line) {
+    lazy_static! {
+      static ref stanza_end_re: Regex = Regex::new(r"^%(end|error)").unwrap();
+    }
+    match stanza_end_re.captures(&line) {
       None => {
         block.push_str(&line);
       }
