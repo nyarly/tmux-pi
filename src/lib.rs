@@ -1,5 +1,5 @@
 use std::thread::{self, JoinHandle};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 #[macro_use]
@@ -40,10 +40,10 @@ impl TmuxControl {
     }
   }
 
-  fn transact(&self, cmd: Box<TmuxCommand>) -> Receiver<Box<Response>> {
+  fn transact(&self, cmd: Box<TmuxCommand>) -> Result(Receiver<Box<Response>>) {
     let (tx, rx) = cmd.response_channel();
-    self.commands.send(Pair(cmd, tx));
-    rx
+    try!(self.commands.send(Pair(cmd, tx)));
+    Ok(rx)
   }
 }
 
