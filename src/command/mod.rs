@@ -11,4 +11,4 @@ pub trait Response : Send {
   fn consume(&mut self, text: &String);
 }
 
-mod info;
+pub mod info;

@@ -1,7 +1,11 @@
-struct Cmd;
+pub struct Cmd;
 
-struct Response {
+pub struct Response {
   content: String
+}
+
+pub fn new() -> Box<Cmd> {
+  Box::new(Cmd{})
 }
 
 use super::TmuxCommand;

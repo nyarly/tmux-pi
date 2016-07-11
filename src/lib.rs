@@ -7,6 +7,12 @@ use std::process::{Command, Stdio};
 use std::thread::{self, JoinHandle};
 use std::sync::mpsc::{Receiver, Sender, channel};
 
+mod command;
+mod command_stream;
+
+// XXX pub?
+pub struct Pair(Box<command::TmuxCommand>, Sender<Box<command::Response>>);
+
 pub struct TmuxControl {
   tmux: u32,
   reader: JoinHandle<()>,
@@ -46,19 +52,11 @@ impl TmuxControl {
   }
   */
 
-  fn transact(&self, cmd: Box<command::TmuxCommand>) ->
-    Result<
+  fn transact(&self, cmd: Box<command::TmuxCommand>) -> Result<
       Receiver<Box<command::Response>>,
-      SendError<Pair>
-        > {
+      SendError<Pair>> {
     let (tx, rx) = cmd.response_channel();
     try!(self.commands.send(Pair(cmd, tx)));
     Ok(rx)
   }
 }
-
-// XXX pub?
-pub struct Pair(Box<command::TmuxCommand>, Sender<Box<command::Response>>);
-
-mod command;
-mod command_stream;

@@ -28,17 +28,20 @@ struct Reader {
   results: Vec<RawResponse>,
 }
 
+mod test;
+
 pub fn write(commands: Receiver<super::Pair>, results: Sender<SeqRs>, mut stdin: Box<Write>) {
   let message: String;
   let mut seq = 0;
-  loop {
-    let super::Pair(command, tx) = commands.recv().unwrap();
+  for pair in commands.iter() {
+    let super::Pair(command, tx) = pair;
     seq += 1;
     if results.send(SeqRs(seq, command.build_response(), tx)).is_err() {
       return
     }
-    let res = stdin.write(command.wire_format());
-    res.unwrap();
+    if stdin.write(command.wire_format()).is_err() {
+      return
+    }
   }
 }
 
