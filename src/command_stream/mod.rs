@@ -1,13 +1,15 @@
 use regex::Regex;
 
 //use std::{str, u64};
-use std::str::FromStr;
+use std::str::{self,FromStr};
 use std::io::{Read,Write,BufRead,BufReader};
-use std::sync::mpsc::{TryRecvError,Receiver, Sender};
+use std::sync::mpsc::{TryRecvError,Receiver, Sender,SendError};
 
 type StreamBuffer<'a> = &'a [u8];
 
 use super::command::Response;
+
+#[derive(Debug)]
 pub struct SeqRs(u64, Box<Response>, Sender<Box<Response>>);
 
 lazy_static!  {
@@ -30,19 +32,27 @@ struct Reader {
 
 mod test;
 
-pub fn write(commands: Receiver<super::Pair>, results: Sender<SeqRs>, mut stdin: Box<Write>) {
+pub fn write<T: Write>(commands: Receiver<super::Pair>, results: Sender<SeqRs>, mut stdin:T) -> T {
+  println!("write");
   let message: String;
   let mut seq = 0;
   for pair in commands.iter() {
     let super::Pair(command, tx) = pair;
     seq += 1;
-    if results.send(SeqRs(seq, command.build_response(), tx)).is_err() {
-      return
+    println!("Command: {:?}#{:?}", str::from_utf8(command.wire_format()).unwrap(), seq);
+    match results.send(SeqRs(seq, command.build_response(), tx)) {
+      Err(SendError(d)) => {
+      println!("Err sending: {:?}", d);
+      return stdin
+      },
+      _ => ()
     }
-    if stdin.write(command.wire_format()).is_err() {
-      return
+    let wr = stdin.write(command.wire_format());
+    if wr.is_err() {
+      println!("Err writing: {:?}", wr);
+      return stdin
     }
-  }
+  }; stdin
 }
 
 pub fn read(stdout: Box<Read>, send_channels: Receiver<SeqRs>) {

@@ -1,4 +1,6 @@
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::fmt::Debug;
+
 pub trait TmuxCommand : Send{
   fn response_channel(&self) -> (Sender<Box<Response>>, Receiver<Box<Response>>) {
     channel()
@@ -7,7 +9,7 @@ pub trait TmuxCommand : Send{
   fn wire_format(&self) -> &'static [u8];
 }
 
-pub trait Response : Send {
+pub trait Response : Send + Debug {
   fn consume(&mut self, text: &String);
 }
 

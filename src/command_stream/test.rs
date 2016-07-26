@@ -1,26 +1,30 @@
 #![cfg(test)]
 
 use super::*;
+use std::str;
+use std::string::String;
 use std::sync::mpsc::{channel,Sender};
-use std::panic::catch_unwind;
 use command::TmuxCommand;
 
 #[test]
 fn writes_commands_to_stream() {
+  use std::io::{Cursor,Write};
   let (ct, cr) = channel();
   let (rt, rr) = channel();
-  let stdin: Vec<u8> = Vec::new();
+  let mut stdin = Box::new(Cursor::new(vec![]));
 
-  let cmd = send_test_cmd(ct);
-  write(cr, rt, Box::new(stdin));
+  let cmd_str = send_test_cmd(ct);
 
-  assert_eq!(cmd.wire_format(), &stdin[..])
+  stdin = write(cr, rt, stdin);
+
+  assert_eq!(String::from_utf8(stdin.into_inner()).unwrap(), cmd_str)
 }
 
-fn send_test_cmd(ct: Sender<::Pair>) -> Box<::command::info::Cmd> {
-  let (resT, resR) = channel();
+fn send_test_cmd(ct: Sender<::Pair>) -> String {
+  let (res_t, _) = channel();
   let cmd = ::command::info::new();
+  let wf = String::from(str::from_utf8(cmd.wire_format()).unwrap());
 
-  ct.send(::Pair(cmd, resT));
-  cmd
+  assert!(ct.send(::Pair(cmd, res_t)).is_ok());
+  wf
 }

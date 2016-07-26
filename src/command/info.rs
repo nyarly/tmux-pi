@@ -1,5 +1,7 @@
+#[derive(Debug)]
 pub struct Cmd;
 
+#[derive(Debug)]
 pub struct Response {
   content: String
 }

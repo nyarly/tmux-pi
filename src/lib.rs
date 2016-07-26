@@ -34,8 +34,8 @@ impl TmuxControl {
     let pid = child.id();
     let stdin = Box::new(child.stdin.expect("didn't open a stdin pipe?!"));
     let stdout = Box::new(child.stdout.expect("didn't open a stdout pipe?!"));
-    let writer = thread::spawn(move || command_stream::write(commands, responses, stdin));
-    let reader = thread::spawn(move || command_stream::read(stdout, send));
+    let writer = thread::spawn(move || { command_stream::write(commands, responses, stdin); });
+    let reader = thread::spawn(move || { command_stream::read(stdout, send); });
 
     TmuxControl {
       tmux: pid, //how do we kill the child tmux process?
@@ -50,7 +50,13 @@ impl TmuxControl {
     ()
     //self.tmux.kill().unwrap(); self.tmux.wait()
   }
-  */
+*/
+
+  pub fn info(&self) -> Result<
+      Receiver<Box<command::Response>>,
+      SendError<Pair>> {
+        self.transact(command::info::new())
+      }
 
   fn transact(&self, cmd: Box<command::TmuxCommand>) -> Result<
       Receiver<Box<command::Response>>,
