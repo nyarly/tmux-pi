@@ -20,6 +20,12 @@ fn writes_commands_to_stream() {
   assert_eq!(String::from_utf8(stdin.into_inner()).unwrap(), cmd_str)
 }
 
+#[test]
+fn reads_responses_from_stream() {
+  read()
+
+}
+
 fn send_test_cmd(ct: Sender<::Pair>) -> String {
   let (res_t, _) = channel();
   let cmd = ::command::info::new();
