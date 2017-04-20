@@ -1,9 +1,9 @@
 use regex::Regex;
+use std::io::{Read, Write, BufRead, BufReader};
 
-//use std::{str, u64};
-use std::str::{self,FromStr};
-use std::io::{Read,Write,BufRead,BufReader};
-use std::sync::mpsc::{TryRecvError,Receiver, Sender,SendError};
+// use std::{str, u64};
+use std::str::{self, FromStr};
+use std::sync::mpsc::{TryRecvError, Receiver, Sender, SendError};
 
 type StreamBuffer<'a> = &'a [u8];
 
@@ -32,27 +32,30 @@ struct Reader {
 
 mod test;
 
-pub fn write<T: Write>(commands: Receiver<super::Pair>, results: Sender<SeqRs>, mut stdin:T) -> T {
+pub fn write<T: Write>(commands: Receiver<super::Pair>, results: Sender<SeqRs>, mut stdin: T) -> T {
   println!("write");
   let message: String;
   let mut seq = 0;
   for pair in commands.iter() {
     let super::Pair(command, tx) = pair;
     seq += 1;
-    println!("Command: {:?}#{:?}", str::from_utf8(command.wire_format()).unwrap(), seq);
+    println!("Command: {:?}#{:?}",
+             str::from_utf8(command.wire_format()).unwrap(),
+             seq);
     match results.send(SeqRs(seq, command.build_response(), tx)) {
       Err(SendError(d)) => {
-      println!("Err sending: {:?}", d);
-      return stdin
-      },
-      _ => ()
+        println!("Err sending: {:?}", d);
+        return stdin;
+      }
+      _ => (),
     }
     let wr = stdin.write(command.wire_format());
     if wr.is_err() {
       println!("Err writing: {:?}", wr);
-      return stdin
+      return stdin;
     }
-  }; stdin
+  }
+  stdin
 }
 
 pub fn read(stdout: Box<Read>, send_channels: Receiver<SeqRs>) {
@@ -65,12 +68,11 @@ fn get_args(line: &str) -> (Option<&str>, Option<&str>, Option<&str>) {
   (captures.at(1), captures.at(2), captures.at(3))
 }
 
-impl  Reader  {
+impl Reader {
   fn new() -> Reader {
-    Reader{
+    Reader {
       maybe_output: None,
-      results : Vec::new(),
-
+      results: Vec::new(),
     }
   }
 
@@ -80,7 +82,7 @@ impl  Reader  {
     for line_res in reader.lines() {
       let line = match line_res {
         Ok(l) => l,
-        Err(e) => return
+        Err(e) => return,
       };
 
       match maybe_output {
@@ -93,7 +95,8 @@ impl  Reader  {
           Err(TryRecvError::Empty) => break,
           Err(_) => return,
           Ok(SeqRs(num, mut resp, tx)) => {
-            let pos = self.results.iter()
+            let pos = self.results
+              .iter()
               .position(|ref r| r.num == num)
               .expect("received response ahead of command");
             let res = self.results.swap_remove(pos);
@@ -151,5 +154,4 @@ impl  Reader  {
       }
     }
   }
-
 }

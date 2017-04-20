@@ -1,14 +1,14 @@
 #![cfg(test)]
 
-use super::*;
+use command::TmuxCommand;
 use std::str;
 use std::string::String;
-use std::sync::mpsc::{channel,Sender};
-use command::TmuxCommand;
+use std::sync::mpsc::{channel, Sender};
+use super::*;
 
 #[test]
 fn writes_commands_to_stream() {
-  use std::io::{Cursor,Write};
+  use std::io::{Cursor, Write};
   let (ct, cr) = channel();
   let (rt, rr) = channel();
   let mut stdin = Box::new(Cursor::new(vec![]));

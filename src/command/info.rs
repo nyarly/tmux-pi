@@ -3,11 +3,11 @@ pub struct Cmd;
 
 #[derive(Debug)]
 pub struct Response {
-  content: String
+  content: String,
 }
 
 pub fn new() -> Box<Cmd> {
-  Box::new(Cmd{})
+  Box::new(Cmd {})
 }
 
 use super::TmuxCommand;
@@ -28,8 +28,6 @@ impl super::Response for Response {
 
 impl Response {
   fn new() -> Response {
-    Response{
-      content: String::from("")
-    }
+    Response { content: String::from("") }
   }
 }
